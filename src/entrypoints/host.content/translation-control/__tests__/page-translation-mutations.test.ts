@@ -2204,34 +2204,41 @@ describe("paragraph unit observation helpers", () => {
     expect(measureUnitHeight(boxless)).toBe(0)
   })
 
-  it("keeps proxy bookkeeping honest when a trigger becomes a unit", () => {
-    const outer = document.createElement("div")
+  it("gives each trigger to the outermost unit that claims it", () => {
+    const inner = document.createElement("div")
     const gate = document.createElement("span")
-    const otherUnit = document.createElement("section")
-    const formerUnit = document.createElement("div")
-    outer.append(gate)
+    const outer = document.createElement("section")
+    const stray = document.createElement("div")
+    inner.append(gate)
+    outer.append(inner)
     const triggers = new Map<HTMLElement, HTMLElement>()
 
+    registerIntersectionTrigger(triggers, gate, inner)
+    expect(triggers.get(gate)).toBe(inner)
+
+    // A boxless wrapper inserted around the already-claimed unit takes the
+    // trigger: only the outer translation covers the wrapper's own text.
     registerIntersectionTrigger(triggers, gate, outer)
     expect(triggers.get(gate)).toBe(outer)
 
-    // A second boxless unit claiming the same gate must not steal it: the first
-    // unit's translation already covers the text inside.
-    registerIntersectionTrigger(triggers, gate, otherUnit)
+    // A nested claim must not steal it back.
+    registerIntersectionTrigger(triggers, gate, inner)
     expect(triggers.get(gate)).toBe(outer)
 
-    // Reordered inside that same unit: the outer unit is still the right target,
-    // and dropping the mapping here would leave the outer unit's own text with no
-    // target left at all.
+    // Watched for itself while still inside the claim: the outer unit stays the
+    // target, since it covers this element's text too.
     registerIntersectionTrigger(triggers, gate, gate)
     expect(triggers.get(gate)).toBe(outer)
 
-    // Once the element is observed as its own unit and no longer sits inside the
-    // mapped unit, the stale hop to the (possibly detached) old unit has to go —
-    // otherwise a hit on the element on screen would translate something else.
-    triggers.clear()
-    registerIntersectionTrigger(triggers, gate, formerUnit)
+    // Watched for itself after leaving the claim: the stale hop has to go, or a
+    // hit would translate the old — possibly detached — unit instead.
+    gate.remove()
     registerIntersectionTrigger(triggers, gate, gate)
     expect(triggers.has(gate)).toBe(false)
+
+    // A claim that no longer contains the newcomer loses to it.
+    triggers.set(gate, stray)
+    registerIntersectionTrigger(triggers, gate, inner)
+    expect(triggers.get(gate)).toBe(inner)
   })
 })

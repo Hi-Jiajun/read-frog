@@ -171,20 +171,27 @@ export function registerIntersectionTrigger(
   trigger: HTMLElement,
   unit: HTMLElement,
 ): void {
+  // One hit per trigger, and translating an outer unit already covers the text of
+  // the units nested inside it — so the right target is the OUTERMOST unit that
+  // contains the trigger. A claim is therefore replaced exactly when the unit
+  // holding it no longer contains the newcomer:
+  //  - a new boxless wrapper around an already-claimed unit takes the trigger
+  //    (only the outer translation covers the wrapper's own text),
+  //  - a nested newcomer leaves the outer claim alone,
+  //  - a stale or departed claim loses to whoever claims the trigger next.
+  const claimed = triggers.get(trigger)
   if (trigger === unit) {
-    // Watching this element for itself — but only drop the mapping when it has
-    // really left the unit it gates. A proxy merely reordered inside the same
-    // still-connected boxless unit keeps the outer unit as its target:
-    // translating the outer covers this element's text too, while dropping the
-    // mapping would translate the child alone and leave the outer unit's own
-    // text with no target at all.
-    const mappedUnit = triggers.get(trigger)
-    if (mappedUnit && !mappedUnit.contains(trigger)) {
+    // Watched for itself: while it still sits inside the unit that claimed it,
+    // that unit remains the target — translating the outer covers this element's
+    // text too, and dropping the claim would leave the outer unit's own text with
+    // no target at all. Once it has left, the claim is stale and has to go, or
+    // the hit would translate a unit that may no longer even be on the page.
+    if (claimed && !claimed.contains(trigger)) {
       triggers.delete(trigger)
     }
     return
   }
-  if (!triggers.has(trigger)) {
+  if (!claimed || !claimed.contains(unit)) {
     triggers.set(trigger, unit)
   }
 }
